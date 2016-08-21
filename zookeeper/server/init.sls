@@ -59,18 +59,6 @@ zoo-cfg:
     - contents: |
         {{ zk.myid }}
 
-{%- if zk.process_control_system is defined %}
-{%- if zk.restart_on_change %}
-zookeeper-in-supervisord:
-  cmd.run:
-    - name: "{{ zk.pcs_restart_command }}"
-    - require:
-      - pkg: {{ zk.process_control_system }}
-    - onchanges:
-       - file: {{ zk.real_config }}/zoo.cfg
-{% endif %}
-{%- else %}
-
 {%- if grains.get('systemd') %}
 {{ zk.real_config }}/zookeeper.env:
   file.managed:
@@ -88,6 +76,7 @@ zookeeper-in-supervisord:
       jvm_opts: {{ zk.jvm_opts }}
       log_level: {{ zk.log_level }}
 
+{%- if zk.process_control_system != True %}
 {{ zk.systemd_script }}:
   file.managed:
     - source: salt://zookeeper/conf/zookeeper.service
@@ -101,8 +90,9 @@ zookeeper-in-supervisord:
     - name: service.systemctl_reload
     - watch:
       - file: {{ zk.systemd_script }}
-{%- else %}
+{%- endif %}
 
+{%- else %}
 {{ zk.real_config }}/zookeeper-env.sh:
   file.managed:
     - source: salt://zookeeper/conf/zookeeper-env.sh
@@ -119,7 +109,7 @@ zookeeper-in-supervisord:
       jvm_opts: {{ zk.jvm_opts }}
       log_level: {{ zk.log_level }}
 
-{%- if zookeeper_map.service_script %}
+{%- if zookeeper_map.service_script and zk.process_control_system != True %}
 {{ zookeeper_map.service_script }}:
   file.managed:
     - source: salt://zookeeper/conf/{{ zookeeper_map.service_script_source }}
@@ -130,9 +120,20 @@ zookeeper-in-supervisord:
     - context:
       alt_home: {{ zk.alt_home }}
 {%- endif %}
+
 {%- endif %}
 
-{% if zk.restart_on_change %}
+
+{%- if zk.process_control_system == True and zk.restart_on_change %}
+zookeeper-in-supervisord:
+  cmd.run:
+    - name: "{{ zk.pcs_restart_command }}"
+    - require:
+      - pkg: {{ zk.process_control_system }}
+    - onchanges:
+       - file: {{ zk.real_config }}/zoo.cfg
+
+{%- elif zk.process_control_system != True and zk.restart_on_change %}
 zookeeper-service:
   service.running:
     - name: zookeeper
@@ -141,5 +142,5 @@ zookeeper-service:
       - file: {{ zk.data_dir }}
     - watch:
       - file: zoo-cfg
-{% endif %}
+
 {% endif %}
